@@ -5,6 +5,7 @@ from pathlib import Path
 import jieba
 import logging
 import os
+import re
 from shutil import copyfile
 import sys
 
@@ -41,20 +42,27 @@ def main(argv):
     search_folder_path = ''
     dict_folder_path = ''
     try:
-        opts, args = getopt.getopt(argv, "hs:d:", ["spath=", "dpath="])
+        opts, args = getopt.getopt(argv, "hs:d:z:p", ["spath=", "dpath=",  "z=", "p="])
     except getopt.GetoptError:
-        print('test.py -s <source_path_root> -d <jieba_dict_root>')
+        print('test.py -s <src_path> -d <dict_path> -z <seg_file_pattern> [-p <include_file_pattern>]')
         sys.exit(2)
 
+    # Default include_file_pattern to '*'
+    include_file_pattern = '.*'
     for opt, arg in opts:
         if opt == '-h':
-            print('test.py -s <source_path_root> -d <jieba_dict_root>')
+            print('test.py -s <source_path> -d <dict_path> -z <seg_file_pattern> [-p <include_file_pattern>]')
             sys.exit()
         elif opt in ("-s", "--spath"):
             search_folder_path = arg
         elif opt in ("-d", "--dpath"):
             dict_folder_path = arg
-    print('Search for files under "', search_folder_path)
+        elif opt in ("-p"):
+            include_file_pattern = arg
+        elif opt in ("-z"):
+            seg_file_pattern = arg
+    print('Search for files under {} matching regex "{}", do text segmentation on files matching regex "{}"'.format(
+        search_folder_path, include_file_pattern, seg_file_pattern))
     print('Jieba dictionary files under "', dict_folder_path)
 
     print("Preprocessing Chinese text files under '{}'".format(search_folder_path))
@@ -64,7 +72,7 @@ def main(argv):
 
     result = [os.path.join(dp, f)
                 for dp, dn, file_paths in os.walk(search_folder_path)
-                    for f in file_paths if ((not f.startswith('.')))]
+                    for f in file_paths if ((not f.startswith('.')) and re.match(include_file_pattern, f))]
 
     for input_file_path in result:
         # Get the sub-path of the input file under root_path+'/'
@@ -81,10 +89,13 @@ def main(argv):
                 if exc.errno != errno.EEXIST:
                     raise
 
+        filename = Path(source_file_path).name
+
         # If this is a Chinese text file, produce a new, segmented version.``
         # Otherwise, just copy it (presumably the rest are the associated English text files.
-        if source_file_path.endswith('_ch.txt') or source_file_path.endswith('_cn.txt'):
+        #if source_file_path.endswith('_ch.txt') or source_file_path.endswith('_cn.txt'):
             #print("Not this time...")
+        if re.match(seg_file_pattern, filename):
             preprocess_text_file(source_file_path, seg_file_path, dict_folder_path)
         else:
             copyfile(source_file_path, seg_file_path)
